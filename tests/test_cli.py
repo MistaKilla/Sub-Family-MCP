@@ -36,7 +36,7 @@ def test_init_list_validate(cli_env: Path) -> None:
 
     validate = runner.invoke(app, ["config", "validate"])
     assert validate.exit_code == 0
-    assert "2 member(s)" in validate.output
+    assert "2 member(s)" in " ".join(validate.output.split())
 
 
 def test_custom_config_path(cli_env: Path, tmp_path: Path) -> None:
