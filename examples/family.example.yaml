@@ -18,6 +18,7 @@ members:
     model: "deepseek-chat"
     api_key_env: "DEEPSEEK_API_KEY"
     trust: "untrusted_cloud"      # prompts are scrubbed for secrets before sending
+    cost: "paid"                  # free | paid | electricity (self-hosted power only)
     capabilities: ["reasoning", "code", "long_context"]
     max_clones: 5                 # parallel swarm sessions this member may run
     timeout_s: 300
@@ -30,6 +31,7 @@ members:
     base_url: "http://192.168.1.50:11434"   # <- replace with your gaming PC / small farm
     model: "qwen2.5-vl:7b"
     trust: "safe_local"
+    cost: "electricity"           # local: only power; omit to infer from trust
     capabilities: ["vision", "fast", "chat"]
     max_clones: 1                 # one request at a time keeps the GPU happy
     timeout_s: 120
@@ -41,6 +43,7 @@ members:
   #   base_url: "http://192.168.1.51:11434"
   #   model: "qwen2.5-coder:7b"
   #   trust: "safe_local"
+  #   cost: "electricity"
   #   capabilities: ["code", "fast"]
   #   max_clones: 1
   #   timeout_s: 180

@@ -55,6 +55,7 @@ members:
     model: "deepseek-chat"
     api_key_env: "DEEPSEEK_API_KEY"
     trust: "untrusted_cloud"      # prompts are scrubbed for secrets before sending
+    cost: "paid"                  # free | paid | electricity (self-hosted power only)
     capabilities: ["reasoning", "code", "long_context"]
     max_clones: 5                 # parallel swarm sessions this member may run
     timeout_s: 300
@@ -65,6 +66,7 @@ members:
     base_url: "http://192.168.1.50:11434"   # <- replace with your gaming PC / small farm
     model: "qwen2.5-vl:7b"
     trust: "safe_local"
+    cost: "electricity"           # local: only power; omit to infer from trust
     capabilities: ["vision", "fast", "chat"]
     max_clones: 1                 # one request at a time keeps the GPU happy
     timeout_s: 120
@@ -111,6 +113,7 @@ case-insensitive, but the canonical name is the YAML key.
 | `headers` | mapping | `{}` | Extra request headers, always sent. |
 | `system_prompt` | string or null | null | Default system prompt, prepended to any per-call `system` value. |
 | `trust` | enum | `safe_local` | `safe_local`, `private_network`, or `untrusted_cloud`. |
+| `cost` | enum or null | null | `free`, `paid`, or `electricity`. When null, inferred from trust: local → `electricity`, remote → `paid`. |
 | `capabilities` | list of strings | `["chat"]` | Tags used for selection. Lowercased and de-duplicated. |
 | `max_clones` | integer 1-64 | `1` | Maximum concurrent generation requests for this member. |
 | `timeout_s` | number > 0, ≤ 3600 | `120` | Per-request HTTP timeout. |
@@ -223,6 +226,36 @@ security:
 ```
 
 See [Security](security.md) for what redaction does and does not catch.
+
+## Cost tiers
+
+`cost` is routing metadata, separate from trust. It tells the primary model
+whether delegating to a member has a marginal price:
+
+| Value | Meaning | Typical member |
+| --- | --- | --- |
+| `free` | No marginal cost: a free API tier or an already-paid subscription. | A free OpenRouter model, a promotional cloud quota. |
+| `paid` | Metered per request or token. | DeepSeek API, OpenAI API, a paid gateway. |
+| `electricity` | Self-hosted hardware; only power and GPU time. | Ollama, LM Studio, vLLM, llama.cpp on your machines. |
+
+If `cost` is omitted, Sub-Family infers `electricity` for `safe_local` members
+and `paid` for everything else. Inference is deliberately conservative for
+remote endpoints, so a free cloud tier must be marked explicitly:
+
+```yaml
+members:
+  free_cloud:
+    base_url: "https://openrouter.ai/api/v1"
+    model: "some-free-model:free"
+    api_key_env: "OPENROUTER_API_KEY"
+    trust: "untrusted_cloud"
+    cost: "free"
+```
+
+`list_family` returns both `cost` and `cost_source` (`explicit` or `inferred`).
+Cost does not change redaction, image policy, or concurrency; use `trust` for
+those. Sub-Family never meters or enforces a budget — the tier only informs the
+agent's choice (bulk work on `free`/`electricity`, hard tasks on `paid`).
 
 ## Capabilities
 

@@ -37,7 +37,7 @@ from sub_family.config.loader import (
     save_config,
     write_example_config,
 )
-from sub_family.config.models import FamilyConfig, MemberConfig, TrustLevel
+from sub_family.config.models import CostTier, FamilyConfig, MemberConfig, TrustLevel
 from sub_family.errors import ConfigError, SubFamilyError
 from sub_family.logging_config import configure_logging
 from sub_family.service import FamilyService, MemberStatus
@@ -61,6 +61,15 @@ app.add_typer(claude_app, name="claude")
 
 console = Console()
 err_console = Console(stderr=True)
+
+COST_ALIASES: dict[str, CostTier | None] = {
+    "free": CostTier.FREE,
+    "paid": CostTier.PAID,
+    "electricity": CostTier.ELECTRICITY,
+    "local": CostTier.ELECTRICITY,
+    "power": CostTier.ELECTRICITY,
+    "auto": None,
+}
 
 TRUST_ALIASES = {
     "local": TrustLevel.SAFE_LOCAL,
@@ -166,7 +175,19 @@ def _member_dict(config: FamilyConfig, name: str) -> dict[str, Any]:
     data = member.model_dump(mode="json", exclude_none=True)
     if data.get("api_key"):
         data["api_key"] = "***"
+    data["cost"] = member.effective_cost.value
+    data["cost_source"] = "inferred" if member.cost_is_inferred else "explicit"
     return data
+
+
+def _parse_cost(value: str | CostTier | None) -> CostTier | None:
+    if value is None or isinstance(value, CostTier):
+        return value
+    key = value.strip().lower()
+    if key not in COST_ALIASES:
+        choices = ", ".join(sorted(COST_ALIASES))
+        raise ConfigError(f"unknown cost tier {value!r}; choose one of: {choices}")
+    return COST_ALIASES[key]
 
 
 def _parse_trust(value: str | TrustLevel) -> TrustLevel:
@@ -250,6 +271,8 @@ def list_command(
                     "name": name,
                     "model": member.model,
                     "trust": member.trust.value,
+                    "cost": member.effective_cost.value,
+                    "cost_source": "inferred" if member.cost_is_inferred else "explicit",
                     "capabilities": member.capabilities,
                     "max_clones": member.max_clones,
                     "enabled": member.enabled,
@@ -266,6 +289,7 @@ def list_command(
     table.add_column("Name", style="bold", no_wrap=True)
     table.add_column("Model")
     table.add_column("Trust", no_wrap=True)
+    table.add_column("Cost", no_wrap=True)
     table.add_column("Capabilities")
     table.add_column("Clones", justify="right")
     table.add_column("State")
@@ -274,6 +298,7 @@ def list_command(
             name,
             escape(member.model),
             _trust_cell(member.trust),
+            _cost_cell(member),
             escape(", ".join(member.capabilities)),
             str(member.max_clones),
             "[green]on[/green]" if member.enabled else "[dim]off[/dim]",
@@ -283,6 +308,11 @@ def list_command(
         "[dim]Tip:[/dim] [bold]sub-family ui[/bold] edits these settings; "
         "[bold]sub-family status[/bold] checks reachability."
     )
+    if any(member.cost_is_inferred for member in members.values()):
+        console.print(
+            "[dim]* cost inferred from trust: safe_local -> electricity, remote -> paid. "
+            "Set `cost` explicitly for free tiers.[/dim]"
+        )
 
 
 @members_app.command("show")
@@ -321,6 +351,13 @@ def members_add(
         "-t",
         help="safe_local | private_network | untrusted_cloud (aliases: local, lan, cloud).",
     ),
+    cost: str | None = typer.Option(
+        None,
+        "--cost",
+        help=(
+            "free | paid | electricity (aliases: local, power, auto). Default: inferred from trust."
+        ),
+    ),
     capability: list[str] = typer.Option(
         ["chat"], "--capability", "-C", help="Repeatable: vision, code, reasoning, fast, ..."
     ),
@@ -353,6 +390,7 @@ def members_add(
                 "api_key": api_key,
                 "api_key_env": api_key_env,
                 "trust": _parse_trust(trust),
+                "cost": _parse_cost(cost),
                 "capabilities": capability,
                 "max_clones": max_clones,
                 "timeout_s": timeout_s,
@@ -378,6 +416,9 @@ def members_edit(
     model: str | None = typer.Option(None, "--model", "-m"),
     description: str | None = typer.Option(None, "--description", "-d"),
     trust: str | None = typer.Option(None, "--trust", "-t"),
+    cost: str | None = typer.Option(
+        None, "--cost", help="free | paid | electricity | auto (auto = infer from trust)."
+    ),
     capability: list[str] | None = typer.Option(None, "--capability", "-C"),
     clear_capabilities: bool = typer.Option(False, "--clear-capabilities"),
     max_clones: int | None = typer.Option(None, "--max-clones", min=1, max=64),
@@ -404,6 +445,8 @@ def members_edit(
                 update[key] = value
         if trust is not None:
             update["trust"] = _parse_trust(trust)
+        if cost is not None:
+            update["cost"] = _parse_cost(cost)
         if clear_capabilities:
             update["capabilities"] = []
         elif capability is not None:
@@ -423,6 +466,8 @@ def members_edit(
             return
         raw = member.model_dump(mode="python", exclude_none=True)
         raw.update(update)
+        if "cost" in update and update["cost"] is None:
+            raw["cost"] = None
         if update.get("api_key") is None and "api_key" in update:
             raw.pop("api_key", None)
         if update.get("system_prompt") is None and "system_prompt" in update:
@@ -561,6 +606,17 @@ def _print_status_table(statuses: list[MemberStatus]) -> None:
             "[yellow]A reachable endpoint does not expose the configured model id.[/yellow] "
             "Check the `model` value and whether the model is pulled."
         )
+
+
+def _cost_cell(member: MemberConfig) -> str:
+    cost = member.effective_cost
+    colour = {
+        CostTier.FREE: "green",
+        CostTier.PAID: "yellow",
+        CostTier.ELECTRICITY: "cyan",
+    }[cost]
+    suffix = "*" if member.cost_is_inferred else ""
+    return f"[{colour}]{cost.value}{suffix}[/{colour}]"
 
 
 def _trust_cell(trust: TrustLevel) -> str:
@@ -981,7 +1037,9 @@ CLAUDE_GUIDE = """\
 This machine has a Sub-Family MCP server with additional models. Delegate
 instead of overloading the local model:
 
-- Call `list_family` once per session. Choose by capability and trust.
+- Call `list_family` once per session. Choose by capability, trust, and cost.
+- Prefer `free`/`electricity` members for bulk work; reserve `paid` for hard
+  tasks where quality or context window matters.
 - Use `ask_family_swarm` for 3+ independent subtasks; do not spawn expensive
   local subagents for work a cloud member can run in parallel.
 - Keep multi-turn work in a named `session_id`; reset it when done.

@@ -43,6 +43,10 @@ endpoints into a delegation family for Claude Code and other MCP clients.
   sniffing, size limits, and remote-image policy warnings.
 - **Trust tiers** (`safe_local`, `private_network`, `untrusted_cloud`) that
   control secret redaction and image policy and are reported with every answer.
+- **Cost tiers** (`free`, `paid`, `electricity`) on every member, returned by
+  `list_family` with `cost_source`. Omitted values are inferred from trust so
+  local hardware is never mistaken for a metered API; the CLI and TUI expose
+  the field directly.
 - **Secret guard** for configured trust levels: PEM private keys, OpenAI-style
   keys, GitHub tokens, AWS access-key IDs, Google API keys, Slack tokens, JWTs,
   bearer tokens, URL credentials, `.env`-style assignments, and named secret

@@ -10,7 +10,7 @@ from pydantic import SecretStr
 from textual.widgets import Button, Checkbox, DataTable, Input, Select, Static, Switch
 
 from sub_family.config.loader import load_config
-from sub_family.config.models import FamilyConfig, MemberConfig, TrustLevel
+from sub_family.config.models import CostTier, FamilyConfig, MemberConfig, TrustLevel
 from sub_family.errors import ConfigError
 from sub_family.providers.base import ProviderHealth
 from sub_family.tui import app as tui_app
@@ -73,6 +73,7 @@ async def test_main_screen_lists_members(tmp_path: Path) -> None:
             "Name",
             "Model",
             "Trust",
+            "Cost",
             "Capabilities",
             "Clones",
             "State",
@@ -81,10 +82,12 @@ async def test_main_screen_lists_members(tmp_path: Path) -> None:
         assert _cell(first, 0) == "lilbro"
         assert _cell(first, 1) == "qwen-test"
         assert _cell(first, 2) == "safe_local"
-        assert _cell(first, 3) == "chat, vision"
-        assert _cell(first, 4) == "2"
-        assert _cell(first, 5) == "enabled"
+        assert _cell(first, 3) == "electricity*"
+        assert _cell(first, 4) == "chat, vision"
+        assert _cell(first, 5) == "2"
+        assert _cell(first, 6) == "enabled"
         assert _cell(table.get_row_at(1), 0) == "big_brother"
+        assert _cell(table.get_row_at(1), 3) == "paid*"
 
         status = str(app.query_one("#status", Static).render())
         assert str(config_path) in status
@@ -105,6 +108,7 @@ async def test_add_member_then_save(tmp_path: Path) -> None:
         _set_input(screen, "#base_url", "http://127.0.0.1:8000")
         _set_input(screen, "#model", "mid-model")
         screen.query_one("#trust", Select).value = TrustLevel.PRIVATE_NETWORK.value
+        screen.query_one("#cost", Select).value = CostTier.FREE.value
         screen.query_one("#cap-vision", Checkbox).value = True
         screen.query_one("#extra_capabilities", Input).value = "json_mode"
         _set_input(screen, "#max_clones", "4")
@@ -117,6 +121,7 @@ async def test_add_member_then_save(tmp_path: Path) -> None:
         added = app.config.members["medium"]
         assert added.model == "mid-model"
         assert added.trust is TrustLevel.PRIVATE_NETWORK
+        assert added.effective_cost is CostTier.FREE
         assert set(added.capabilities) == {"chat", "vision", "json_mode"}
         assert added.max_clones == 4
         assert added.timeout_s == 45.0
@@ -338,6 +343,7 @@ def test_parse_member_form_helpers() -> None:
     assert member.extra_body == {"seed": 7}
     assert member.enabled is False
     assert member.verify_tls is False
+    assert member.effective_cost is CostTier.ELECTRICITY
 
     with pytest.raises(tui_app.FormError):
         parse_member_form({**values, "name": "UPPER"})

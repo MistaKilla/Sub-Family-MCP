@@ -10,6 +10,7 @@ from sub_family.config.loader import (
     write_example_config,
 )
 from sub_family.config.models import (
+    CostTier,
     FamilyConfig,
     MemberConfig,
     SecurityConfig,
@@ -19,6 +20,7 @@ from sub_family.config.models import (
 )
 
 __all__ = [
+    "CostTier",
     "FamilyConfig",
     "MemberConfig",
     "SecurityConfig",

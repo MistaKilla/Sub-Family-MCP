@@ -5,7 +5,6 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-from tests.conftest import write_image
 
 from sub_family.errors import (
     MemberDisabled,
@@ -14,6 +13,7 @@ from sub_family.errors import (
     SessionError,
     ToolInputError,
 )
+from tests.conftest import write_image
 
 PNG_BYTES = b"\x89PNG\r\n\x1a\n" + b"payload"
 
@@ -230,6 +230,10 @@ async def test_list_members_exposes_no_secrets(service) -> None:
     serialised = str(members)
     assert "TEST_API_KEY" in serialised
     assert "sk-" not in serialised
+    by_name = {member["name"]: member for member in members}
+    assert by_name["lilbro"]["cost"] == "electricity"
+    assert by_name["lilbro"]["cost_source"] == "inferred"
+    assert by_name["big_brother"]["cost"] == "paid"
 
 
 async def test_policy_blocks_prompt(service) -> None:

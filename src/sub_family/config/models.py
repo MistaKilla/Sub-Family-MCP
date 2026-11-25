@@ -75,6 +75,35 @@ class TrustLevel(StrEnum):
         }[self]
 
 
+class CostTier(StrEnum):
+    """How a member is paid for.
+
+    ``free``
+        No marginal cost: a free API tier or a subscription already paid for.
+    ``paid``
+        Metered per request/token (cloud API, paid gateway).
+    ``electricity``
+        Self-hosted hardware; the only marginal cost is power.
+
+    Cost is independent of trust: a paid cloud model can still be the only
+    place where private code may go, and a free local model still consumes
+    electricity and GPU time.
+    """
+
+    FREE = "free"
+    PAID = "paid"
+    ELECTRICITY = "electricity"
+
+    @property
+    def label(self) -> str:
+        """Short human-readable label."""
+        return {
+            CostTier.FREE: "free",
+            CostTier.PAID: "paid",
+            CostTier.ELECTRICITY: "electricity",
+        }[self]
+
+
 class MemberConfig(BaseModel):
     """One model endpoint in the family."""
 
@@ -91,6 +120,7 @@ class MemberConfig(BaseModel):
     headers: dict[str, str] = Field(default_factory=dict)
     system_prompt: str | None = None
     trust: TrustLevel = TrustLevel.SAFE_LOCAL
+    cost: CostTier | None = None
     capabilities: list[str] = Field(default_factory=lambda: ["chat"])
     max_clones: int = Field(default=1, ge=1, le=64)
     timeout_s: float = Field(default=120.0, gt=0, le=3600)
@@ -181,6 +211,23 @@ class MemberConfig(BaseModel):
     def has_vision(self) -> bool:
         """Whether the member accepts image input."""
         return self.has_capability("vision")
+
+    @property
+    def effective_cost(self) -> CostTier:
+        """Return the explicit cost tier, or infer a conservative default.
+
+        Local endpoints are assumed to cost electricity; remote endpoints are
+        assumed to be paid. Set ``cost`` explicitly to override either default,
+        for example for a free cloud tier.
+        """
+        if self.cost is not None:
+            return self.cost
+        return CostTier.ELECTRICITY if self.trust is TrustLevel.SAFE_LOCAL else CostTier.PAID
+
+    @property
+    def cost_is_inferred(self) -> bool:
+        """Whether the effective cost came from the trust-based default."""
+        return self.cost is None
 
     @property
     def auth_configured(self) -> bool:

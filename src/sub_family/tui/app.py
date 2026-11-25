@@ -39,6 +39,7 @@ from sub_family.config.loader import resolve_api_key, save_config
 from sub_family.config.models import (
     KNOWN_CAPABILITIES,
     MEMBER_NAME_RE,
+    CostTier,
     FamilyConfig,
     MemberConfig,
     TrustLevel,
@@ -54,6 +55,14 @@ _NUMBER_LABELS = {
     "retries": "Retries",
 }
 _NUMERIC_FIELDS = ("max_clones", "timeout_s", "retries")
+
+
+def _default_cost_for(trust: object) -> str:
+    return (
+        CostTier.ELECTRICITY.value
+        if str(trust) == TrustLevel.SAFE_LOCAL.value
+        else CostTier.PAID.value
+    )
 
 
 class FormError(ValueError):
@@ -143,6 +152,19 @@ def parse_member_form(
     if trust not in valid_trust:
         raise FormError(f"Trust must be one of: {', '.join(sorted(valid_trust))}.")
 
+    cost_value = values.get("cost")
+    if cost_value is None or cost_value == "":
+        cost = (
+            base.effective_cost.value
+            if base is not None
+            else ("electricity" if trust == TrustLevel.SAFE_LOCAL.value else "paid")
+        )
+    else:
+        cost = cost_value.value if isinstance(cost_value, CostTier) else str(cost_value)
+    valid_cost = {tier.value for tier in CostTier}
+    if cost not in valid_cost:
+        raise FormError(f"Cost must be one of: {', '.join(sorted(valid_cost))}.")
+
     capabilities: list[str] = []
     raw_capabilities = values.get("capabilities", ())
     if isinstance(raw_capabilities, str):
@@ -192,6 +214,7 @@ def parse_member_form(
             "base_url": str(values.get("base_url") or "").strip(),
             "model": str(values.get("model") or "").strip(),
             "trust": trust,
+            "cost": cost,
             "capabilities": capabilities,
             **parsed_numbers,
             "api_key_env": api_key_env,
@@ -295,6 +318,8 @@ class MemberFormScreen(ModalScreen[dict[str, Any] | None]):
         self.member_name = name or ""
         self.existing_names = set(existing_names)
         self.editing = member is not None
+        self._cost_touched = member is not None and member.cost is not None
+        self._suppress_cost_event = False
 
     # ------------------------------------------------------------------ layout
     def compose(self) -> ComposeResult:
@@ -348,6 +373,25 @@ class MemberFormScreen(ModalScreen[dict[str, Any] | None]):
                     value=trust_value,
                     allow_blank=False,
                     id="trust",
+                )
+
+                yield Label("Cost", classes="field-label")
+                cost_value = (
+                    self.member.effective_cost.value if self.member else CostTier.ELECTRICITY.value
+                )
+                yield Select(
+                    [
+                        ("free (no marginal cost)", CostTier.FREE.value),
+                        ("paid (metered API)", CostTier.PAID.value),
+                        ("electricity (self-hosted power)", CostTier.ELECTRICITY.value),
+                    ],
+                    value=cost_value,
+                    allow_blank=False,
+                    id="cost",
+                )
+                yield Static(
+                    "Choose electricity for hardware you own; free for a free API tier.",
+                    classes="hint",
                 )
 
                 yield Label("Capabilities", classes="field-label")
@@ -442,17 +486,42 @@ class MemberFormScreen(ModalScreen[dict[str, Any] | None]):
         target = "#description" if self.editing else "#name"
         self.query_one(target, Input).focus()
 
+    @on(Select.Changed, "#trust")
+    def _trust_changed(self, event: Select.Changed) -> None:
+        """Align cost with trust until the user picks a cost explicitly."""
+        if self._cost_touched:
+            return
+        cost_select = self.query_one("#cost", Select)
+        target = _default_cost_for(event.value)
+        if str(cost_select.value) != target:
+            self._suppress_cost_event = True
+            cost_select.value = target
+
+    @on(Select.Changed, "#cost")
+    def _cost_changed(self, event: Select.Changed) -> None:
+        if self._suppress_cost_event:
+            self._suppress_cost_event = False
+            return
+        self._cost_touched = True
+
     # ---------------------------------------------------------------- actions
     def action_cancel(self) -> None:
         self.dismiss(None)
 
     def action_submit(self) -> None:
+        trust_value = str(self.query_one("#trust", Select).value)
+        selected_cost = str(self.query_one("#cost", Select).value)
+        # Values equal to the trust-based default are left implicit; anything
+        # else (a free cloud tier, or electricity on a remote member) is saved
+        # explicitly. This also keeps programmatic Select values honest.
+        cost_value = None if selected_cost == _default_cost_for(trust_value) else selected_cost
         values = {
             "name": self.query_one("#name", Input).value,
             "description": self.query_one("#description", Input).value,
             "base_url": self.query_one("#base_url", Input).value,
             "model": self.query_one("#model", Input).value,
             "trust": self.query_one("#trust", Select).value,
+            "cost": cost_value,
             "capabilities": [
                 capability
                 for capability in KNOWN_CAPABILITIES
@@ -581,7 +650,7 @@ class FamilyEditor(App[None]):
 
     def on_mount(self) -> None:
         table = self.query_one("#members", DataTable)
-        table.add_columns("Name", "Model", "Trust", "Capabilities", "Clones", "State")
+        table.add_columns("Name", "Model", "Trust", "Cost", "Capabilities", "Clones", "State")
         self._refresh_table()
         self._update_status()
         table.focus()
@@ -614,11 +683,18 @@ class FamilyEditor(App[None]):
                 TrustLevel.PRIVATE_NETWORK: "cyan",
                 TrustLevel.UNTRUSTED_CLOUD: "yellow",
             }[member.trust]
+            cost_style = {
+                CostTier.FREE: "green",
+                CostTier.PAID: "yellow",
+                CostTier.ELECTRICITY: "cyan",
+            }[member.effective_cost]
+            cost_label = member.effective_cost.value + ("*" if member.cost_is_inferred else "")
             capabilities = ", ".join(member.capabilities) or "—"
             table.add_row(
                 Text(name, style="bold"),
                 member.model,
                 Text(member.trust.value, style=trust_style),
+                Text(cost_label, style=cost_style),
                 capabilities,
                 str(member.max_clones),
                 Text("enabled", style="green") if member.enabled else Text("disabled", style="dim"),

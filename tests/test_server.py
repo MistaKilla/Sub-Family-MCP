@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 from mcp import Client
-from tests.conftest import json_content
 
 from sub_family.server import create_server
+from tests.conftest import json_content
 
 
 async def test_tools_are_registered_with_descriptions(service) -> None:
@@ -37,6 +37,9 @@ async def test_list_family_tool(service) -> None:
     assert payload["count"] == 2
     assert {member["name"] for member in payload["members"]} == {"lilbro", "big_brother"}
     assert any(member["vision"] for member in payload["members"])
+    by_name = {member["name"]: member for member in payload["members"]}
+    assert by_name["lilbro"]["cost"] == "electricity"
+    assert by_name["big_brother"]["cost"] == "paid"
 
 
 async def test_ask_family_tool(service) -> None:

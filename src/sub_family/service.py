@@ -287,6 +287,8 @@ class FamilyService:
                     "description": member.description,
                     "model": member.model,
                     "trust": member.trust.value,
+                    "cost": member.effective_cost.value,
+                    "cost_source": "inferred" if member.cost_is_inferred else "explicit",
                     "capabilities": member.capabilities,
                     "vision": member.has_vision,
                     "max_clones": member.max_clones,

@@ -69,6 +69,8 @@ def test_add_show_edit_remove(cli_env: Path) -> None:
             "fast",
             "--max-clones",
             "2",
+            "--cost",
+            "electricity",
         ],
     )
     assert added.exit_code == 0, added.output
@@ -78,6 +80,8 @@ def test_add_show_edit_remove(cli_env: Path) -> None:
     assert show.exit_code == 0, show.output
     payload = json.loads(show.stdout)
     assert payload["trust"] == "private_network"
+    assert payload["cost"] == "electricity"
+    assert payload["cost_source"] == "explicit"
     assert payload["capabilities"] == ["code", "fast"]
 
     edited = runner.invoke(
@@ -88,6 +92,7 @@ def test_add_show_edit_remove(cli_env: Path) -> None:
     payload = json.loads(show_again.stdout)
     assert payload["timeout_s"] == 180
     assert payload["trust"] == "untrusted_cloud"
+    assert payload["cost"] == "electricity"
 
     removed = runner.invoke(app, ["members", "remove", "farm_two", "--yes"])
     assert removed.exit_code == 0, removed.output
@@ -207,3 +212,47 @@ def test_claude_snippet(cli_env: Path) -> None:
     guide = runner.invoke(app, ["claude", "guide"])
     assert guide.exit_code == 0
     assert "Sub-Family delegation" in guide.output
+
+
+def test_cost_is_inferred_from_trust_and_can_override(cli_env: Path) -> None:
+    runner.invoke(app, ["init"])
+    local_add = runner.invoke(
+        app,
+        [
+            "members",
+            "add",
+            "local_worker",
+            "--base-url",
+            "http://localhost:11434",
+            "--model",
+            "m",
+            "--trust",
+            "local",
+        ],
+    )
+    assert local_add.exit_code == 0, local_add.output
+    cloud_add = runner.invoke(
+        app,
+        [
+            "members",
+            "add",
+            "cloud_worker",
+            "--base-url",
+            "https://example.com",
+            "--model",
+            "m",
+            "--trust",
+            "cloud",
+        ],
+    )
+    assert cloud_add.exit_code == 0, cloud_add.output
+
+    local = json.loads(runner.invoke(app, ["members", "show", "local_worker", "--json"]).stdout)
+    cloud = json.loads(runner.invoke(app, ["members", "show", "cloud_worker", "--json"]).stdout)
+    assert (local["cost"], local["cost_source"]) == ("electricity", "inferred")
+    assert (cloud["cost"], cloud["cost_source"]) == ("paid", "inferred")
+
+    overridden = runner.invoke(app, ["members", "edit", "cloud_worker", "--cost", "free"])
+    assert overridden.exit_code == 0, overridden.output
+    cloud = json.loads(runner.invoke(app, ["members", "show", "cloud_worker", "--json"]).stdout)
+    assert (cloud["cost"], cloud["cost_source"]) == ("free", "explicit")

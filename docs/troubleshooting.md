@@ -239,6 +239,28 @@ and a `redactions` array:
 - A literal API key in the config is not redacted from the config file; only
   prompts and system prompts pass through the guard.
 
+## Cost tier looks wrong
+
+`list_family` reports `cost` plus `cost_source`. If a local member shows `paid`
+or a free cloud tier shows `paid`, the field was omitted and Sub-Family inferred
+the conservative default (`safe_local` → `electricity`, everything else →
+`paid`). Set it explicitly:
+
+```yaml
+members:
+  lilbro:
+    # ...
+    cost: "electricity"   # local hardware, power only
+  free_cloud:
+    # ...
+    trust: "untrusted_cloud"
+    cost: "free"          # free API tier or already-paid subscription
+```
+
+`sub-family members edit lilbro --cost electricity` and `--cost auto` work from
+the CLI; the TUI exposes the same selector. Cost is routing metadata only — it
+does not change redaction, images, concurrency, or billing.
+
 ## Sessions grow, or sessions are disabled
 
 - `sessions.max_messages` and `sessions.max_chars` bound one session's replay

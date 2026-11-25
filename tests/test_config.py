@@ -17,7 +17,7 @@ from sub_family.config.loader import (
     save_config,
     write_example_config,
 )
-from sub_family.config.models import FamilyConfig, MemberConfig, TrustLevel
+from sub_family.config.models import CostTier, FamilyConfig, MemberConfig, TrustLevel
 from sub_family.errors import ConfigError, MemberNotFound
 
 
@@ -205,6 +205,23 @@ def test_render_config_yaml_roundtrips() -> None:
     text = render_config_yaml(config)
     raw = yaml.safe_load(text)
     assert FamilyConfig.model_validate(raw) == config
+
+
+def test_cost_inference_and_explicit_values() -> None:
+    local = MemberConfig(base_url="http://localhost:1", model="m")
+    assert local.effective_cost is CostTier.ELECTRICITY
+    assert local.cost_is_inferred
+    remote = MemberConfig(
+        base_url="https://example.com", model="m", trust=TrustLevel.UNTRUSTED_CLOUD
+    )
+    assert remote.effective_cost is CostTier.PAID
+    free = MemberConfig(base_url="https://example.com", model="m", cost=CostTier.FREE)
+    assert free.effective_cost is CostTier.FREE
+    assert not free.cost_is_inferred
+    with pytest.raises(ValueError):
+        MemberConfig.model_validate(
+            {"base_url": "http://localhost:1", "model": "m", "cost": "expensive"}
+        )
 
 
 def test_trust_level_properties() -> None:

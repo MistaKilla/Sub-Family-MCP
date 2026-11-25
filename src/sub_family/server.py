@@ -33,21 +33,25 @@ Sub-Family is a delegation layer: it gives you additional language models
 
 Operating rules:
 1. Call `list_family` before delegating. Pick members by `capabilities`
-   (vision, reasoning, code, fast, long_context) and by `trust`.
-2. `ask_family_swarm` is for 3 or more independent subtasks. Fan them out
+   (vision, reasoning, code, fast, long_context), by `trust`, and by `cost`
+   (`free`, `paid`, or `electricity` for self-hosted hardware).
+2. Prefer `free` or `electricity` members for bulk, drafts, OCR, and broad
+   parallel audits. Reserve `paid` members for work where quality or context
+   window matters, and say so when the choice affects cost.
+3. `ask_family_swarm` is for 3 or more independent subtasks. Fan them out
    instead of spawning resource-hungry local subagents; the model provider runs
    the branches in parallel, not this machine.
-3. Use a stable `session_id` for iterative work with one member; omit it for
+4. Use a stable `session_id` for iterative work with one member; omit it for
    one-shot questions. Sessions persist across restarts and are isolated per
    (member, session_id). Reset them when a task is finished.
-4. Never send API keys, `.env` contents, credentials, or private business logic
+5. Never send API keys, `.env` contents, credentials, or private business logic
    to members whose trust is `untrusted_cloud`. The server redacts known secret
    shapes as a seatbelt, not a guarantee; do not rely on it.
-5. Images can only go to members with the `vision` capability. Prefer local
+6. Images can only go to members with the `vision` capability. Prefer local
    vision members for screenshots that may contain secrets.
-6. Member answers are advice, not verified facts. Check code and commands
+7. Member answers are advice, not verified facts. Check code and commands
    before applying them, and keep the final judgement on the primary agent.
-7. Check `family_status` when a member errors or before a large fan-out; local
+8. Check `family_status` when a member errors or before a large fan-out; local
    machines can be offline and small GPUs have a clone limit of 1.
 """
 
@@ -84,10 +88,12 @@ def create_server(service: FamilyService, *, own_service: bool = False) -> MCPSe
 
         Call this before delegating work. Each member has a name, model id,
         capabilities (`vision`, `reasoning`, `code`, `fast`, `long_context`),
-        a trust level, a context window, and a concurrency limit (`max_clones`).
-        Members marked `untrusted_cloud` leave the local machine and must not
-        receive secrets. Disabled members are hidden unless `include_disabled`
-        is true.
+        a trust level, a cost tier, a context window, and a concurrency limit
+        (`max_clones`). Cost is `free` (no marginal cost), `paid` (metered), or
+        `electricity` (self-hosted hardware, power only). `cost_source` says
+        whether the tier was configured or inferred from trust. Members marked
+        `untrusted_cloud` leave the local machine and must not receive secrets.
+        Disabled members are hidden unless `include_disabled` is true.
 
         Args:
             include_disabled: Also return members disabled in the config.

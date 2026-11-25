@@ -48,8 +48,11 @@ not run on the primary model or on more local subagents:
 
 - **YAML registry** (default `~/.config/sub-family/family.yaml`, or
   `%APPDATA%\sub-family\family.yaml` on Windows) with strict validation, model
-  ids, base URLs, trust levels, capabilities, timeouts, and per-member
-  concurrency.
+  ids, base URLs, trust levels, cost tiers, capabilities, timeouts, and
+  per-member concurrency.
+- **Cost-aware routing metadata**: every member is `free`, `paid`, or
+  `electricity` (self-hosted power only), and the agent sees the tier when it
+  chooses a delegate. Omitted values are inferred from trust.
 - **Seven MCP tools**: inspect the family, probe health, ask one member, run a
   parallel swarm, list sessions, read history, reset a session.
 - **Persistent sessions** in SQLite, keyed by `(member, session_id)`, with a
@@ -198,6 +201,7 @@ members:
     model: "deepseek-chat"
     api_key_env: "DEEPSEEK_API_KEY"
     trust: "untrusted_cloud"
+    cost: "paid"
     capabilities: ["reasoning", "code", "long_context"]
     max_clones: 5
     timeout_s: 300
@@ -208,6 +212,7 @@ members:
     base_url: "http://192.168.1.50:11434"
     model: "qwen2.5-vl:7b"
     trust: "safe_local"
+    cost: "electricity"
     capabilities: ["vision", "fast", "chat"]
     max_clones: 1
     timeout_s: 120
@@ -241,7 +246,7 @@ backend example is documented in [Configuration](docs/configuration.md).
 
 | Tool | What it does | Use it when |
 | --- | --- | --- |
-| `list_family` | Returns members, models, trust, capabilities, context windows, clone limits, and enabled state. | Once per session, before choosing a delegate. `include_disabled` reveals hidden members. |
+| `list_family` | Returns members, models, trust, cost, capabilities, context windows, clone limits, and enabled state. | Once per session, before choosing a delegate. `include_disabled` reveals hidden members. |
 | `family_status` | Probes each member's `/models` endpoint; reports latency, reachability, and whether the configured model is exposed. | Before a large fan-out, after a failure, or when a local machine may be offline. |
 | `ask_family` | Sends one prompt to one member; optional persistent session, images, system prompt, temperature, and token limit. | One well-scoped task: review, second opinion, screenshot analysis, focused generation. |
 | `ask_family_swarm` | Runs independent prompts against one member in parallel, bounded by `max_clones`; optional synthesis. | Three or more independent subtasks: audit five modules, test several files, compare approaches. |
@@ -304,13 +309,27 @@ What happens:
 - Per-branch content is truncated to `swarm.max_result_chars` (default 12,000
   characters) before it reaches the primary model.
 
-## Trust and security
+## Trust, cost, and security
 
 | Trust level | Intended use | Redaction by default | Images |
 | --- | --- | --- | --- |
 | `safe_local` | Model on hardware you control. | None | Allowed. |
 | `private_network` | Remote endpoint you operate. | None | Allowed with a warning. |
 | `untrusted_cloud` | Third-party API. | Secret patterns replaced. | Allowed with a warning; can be denied. |
+
+Cost is a separate axis from trust:
+
+| Cost tier | Meaning | Typical member |
+| --- | --- | --- |
+| `free` | No marginal cost (free API tier, included subscription). | OpenRouter free model, free cloud quota. |
+| `paid` | Metered per request/token. | DeepSeek, OpenAI, a paid gateway. |
+| `electricity` | Self-hosted hardware; only power. | Ollama/LM Studio/vLLM on your own machines. |
+
+If `cost` is omitted, Sub-Family infers it: `safe_local` becomes `electricity`,
+everything else becomes `paid`. The `list_family` result includes `cost` and
+`cost_source` (`explicit` or `inferred`) so the agent can prefer cheap members
+for bulk work and reserve paid ones for hard tasks. This is routing metadata,
+not billing: Sub-Family does not track or cap spend.
 
 Before sending to an `untrusted_cloud` member, the guard redacts known credential
 shapes (private keys, `sk-` keys, GitHub/AWS/Google/Slack tokens, JWTs, bearer

@@ -162,7 +162,9 @@ The exact block is also in [`examples/CLAUDE.md`](../examples/CLAUDE.md):
 This machine has a Sub-Family MCP server with additional models. Delegate
 instead of overloading the local model:
 
-- Call `list_family` once per session. Choose by capability and trust.
+- Call `list_family` once per session. Choose by capability, trust, and cost.
+- Prefer `free`/`electricity` members for bulk work; reserve `paid` for hard
+  tasks where quality or context window matters.
 - Use `ask_family_swarm` for 3+ independent subtasks; do not spawn expensive
   local subagents for work a cloud member can run in parallel.
 - Keep multi-turn work in a named `session_id`; reset it when done.
@@ -238,6 +240,29 @@ compare it with your own, then give me your final recommendation.
 
 The primary model keeps ownership of the final answer. Sub-Family does not
 merge opinions automatically unless you ask for synthesis.
+
+### Cost-aware delegation
+
+Each member returned by `list_family` carries a `cost` tier:
+
+- `free` — no marginal cost (free API tier or an already-paid subscription);
+- `paid` — metered per request/token;
+- `electricity` — self-hosted hardware, power only.
+
+A useful default is to send bulk, drafts, OCR, and broad parallel audits to
+`free` or `electricity` members, and reserve `paid` members for architecture,
+hard debugging, or large-context work. Ask Claude to state the trade-off when
+both are viable:
+
+```text
+Use list_family. For the mechanical scan of these 40 files, prefer a free or
+electricity member with enough context. If only a paid member can do it, say so
+before sending.
+```
+
+If `cost` is omitted in `family.yaml`, it is inferred (`safe_local` →
+`electricity`, remote → `paid`), and `cost_source` reports whether the value was
+explicit. Cost does not affect redaction or image policy; those follow `trust`.
 
 ## Session lifecycle
 
