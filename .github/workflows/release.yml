@@ -1,0 +1,145 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing tag to publish (for example v0.1.0). Must match the package version."
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    name: Verify release metadata
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.verify.outputs.tag }}
+      version: ${{ steps.verify.outputs.version }}
+    steps:
+      - name: Check out the release tag
+        uses: actions/checkout@v7
+        with:
+          # On a tag push github.ref is refs/tags/vX.Y.Z; on manual dispatch the
+          # operator supplies the tag explicitly.
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref }}
+
+      - name: Check tag, package version, and server.json agree
+        id: verify
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          REF_NAME: ${{ github.ref_name }}
+          INPUT_TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+
+          tag="${INPUT_TAG:-}"
+          if [ "$EVENT_NAME" = "push" ]; then
+            tag="$REF_NAME"
+          fi
+
+          case "$tag" in
+            v*) ;;
+            *) echo "::error::Release tag must look like v0.1.0 (got '$tag')"; exit 1 ;;
+          esac
+
+          version="$(sed -n 's/^__version__[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p' src/sub_family/__init__.py | head -n 1)"
+          if [ -z "$version" ]; then
+            echo "::error::Could not read __version__ from src/sub_family/__init__.py"
+            exit 1
+          fi
+
+          if [ "$tag" != "v$version" ]; then
+            echo "::error::Tag '$tag' does not match package version v$version"
+            exit 1
+          fi
+
+          python3 -c 'import json, sys; v = json.load(open("server.json", encoding="utf-8"))["version"]; sys.exit(0 if v == sys.argv[1] else f"server.json version {v} != package version {sys.argv[1]}")' "$version"
+
+          echo "Releasing $tag (package version $version)"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+  build:
+    name: Build distributions
+    needs: prepare
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the release tag
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.prepare.outputs.tag }}
+
+      # No floating v10 major tag exists upstream; pin the exact release.
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v10.4.0
+        with:
+          enable-cache: true
+
+      - name: Build sdist and wheel
+        run: uv build
+
+      - name: Verify distribution metadata with twine
+        run: uvx --from twine twine check dist/*
+
+      - name: Store distributions
+        uses: actions/upload-artifact@v7
+        with:
+          name: dist
+          path: dist/
+          if-no-files-found: error
+          retention-days: 7
+
+  publish-pypi:
+    name: Publish to PyPI (trusted publishing)
+    needs: [prepare, build]
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/p/sub-family-mcp
+    permissions:
+      id-token: write # OIDC token for PyPI trusted publishing; no API token stored
+    steps:
+      - name: Download distributions
+        uses: actions/download-artifact@v8
+        with:
+          name: dist
+          path: dist/
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: dist/
+          # A retry after a failed GitHub Release step must not fail on the
+          # already-uploaded files. PyPI still rejects any real version conflict.
+          skip-existing: true
+
+  github-release:
+    name: Create GitHub Release
+    needs: [prepare, publish-pypi]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download distributions
+        uses: actions/download-artifact@v8
+        with:
+          name: dist
+          path: dist/
+
+      - name: Create GitHub Release with generated notes
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: ${{ needs.prepare.outputs.tag }}
+          name: ${{ needs.prepare.outputs.tag }}
+          generate_release_notes: true
+          files: dist/*
+          fail_on_unmatched_files: true
