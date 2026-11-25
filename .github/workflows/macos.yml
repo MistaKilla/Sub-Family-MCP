@@ -1,0 +1,50 @@
+name: macOS
+
+# GitHub's arm64 macOS runners are capacity-constrained and can sit in the
+# queue for many minutes, which would block every push. Run the same suite on
+# macOS weekly instead, and allow a manual run when changing platform-sensitive
+# code (paths, permissions, subprocess handling, TUI).
+on:
+  schedule:
+    - cron: "0 4 * * 1" # Mondays 04:00 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: macos-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: macOS / Python 3.13
+    runs-on: macos-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v10.4.0
+        with:
+          python-version: "3.13"
+          enable-cache: true
+
+      - name: Install Python 3.13
+        run: uv python install 3.13
+
+      - name: Install project and dev dependencies
+        run: uv sync --locked --extra dev --python 3.13
+
+      - name: Lint (ruff check)
+        run: uv run ruff check --no-cache .
+
+      - name: Format check (ruff format)
+        run: uv run ruff format --check .
+
+      - name: Type check (mypy)
+        run: uv run mypy src
+
+      - name: Test
+        run: uv run pytest -q

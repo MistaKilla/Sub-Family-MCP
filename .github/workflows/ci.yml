@@ -21,11 +21,6 @@ jobs:
       matrix:
         os: [ubuntu-latest]
         python-version: ["3.11", "3.12", "3.13"]
-        include:
-          # One macOS run catches platform-specific path/permission bugs without
-          # tripling the cost of the matrix.
-          - os: macos-latest
-            python-version: "3.13"
     steps:
       - name: Check out repository
         uses: actions/checkout@v7
