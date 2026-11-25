@@ -11,6 +11,7 @@ from typing import Any, ClassVar
 
 import pytest
 from mcp import Client, StdioServerParameters
+
 from tests.conftest import json_content
 
 
