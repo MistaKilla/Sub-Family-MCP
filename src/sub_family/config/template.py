@@ -1,0 +1,76 @@
+"""The starter ``family.yaml`` written by ``sub-family init``.
+
+Keeping the template as YAML text (instead of serialising a model) preserves the
+explanatory comments and commented-out examples that make the file approachable
+for first-time users. ``default_family()`` parses this same text, so the example
+shown in the docs cannot drift from the actual defaults.
+"""
+
+from __future__ import annotations
+
+EXAMPLE_YAML = """\
+# Sub-Family family registry
+# Documentation: https://github.com/MistaKilla/Sub-Family-MCP
+#
+# Manage this file from the console with:  sub-family ui
+# Or edit it by hand -- the schema is validated on load.
+#
+# base_url must point at an OpenAI-compatible API root. Sub-Family appends
+# /v1/chat/completions when the URL does not already end in /v1 (Ollama, LM
+# Studio, vLLM, llama.cpp server, DeepSeek, OpenRouter and most gateways work).
+# Keep API keys out of this file: name an environment variable instead.
+
+version: 1
+
+members:
+  big_brother:
+    description: "Cloud heavyweight for architecture, hard debugging and code review."
+    base_url: "https://api.deepseek.com"
+    model: "deepseek-chat"
+    api_key_env: "DEEPSEEK_API_KEY"
+    trust: "untrusted_cloud"      # prompts are scrubbed for secrets before sending
+    capabilities: ["reasoning", "code", "long_context"]
+    max_clones: 5                 # parallel swarm sessions this member may run
+    timeout_s: 300
+    max_tokens: 8192
+    # system_prompt: |
+    #   You are the family's senior engineer. Be concrete and terse.
+
+  lilbro:
+    description: "Small local vision model for screenshots, diagrams and quick OCR."
+    base_url: "http://192.168.1.50:11434"   # <- replace with your gaming PC / small farm
+    model: "qwen2.5-vl:7b"
+    trust: "safe_local"
+    capabilities: ["vision", "fast", "chat"]
+    max_clones: 1                 # one request at a time keeps the GPU happy
+    timeout_s: 120
+    max_tokens: 2048
+
+  # Add another farm by copying this block -- that is the whole ritual.
+  # farm_two:
+  #   description: "Cheap local worker for boilerplate and tests."
+  #   base_url: "http://192.168.1.51:11434"
+  #   model: "qwen2.5-coder:7b"
+  #   trust: "safe_local"
+  #   capabilities: ["code", "fast"]
+  #   max_clones: 1
+  #   timeout_s: 180
+
+sessions:
+  enabled: true
+  max_messages: 40        # sliding window kept per (member, session_id)
+  max_chars: 80000
+  ttl_days: 30            # 0 disables automatic pruning
+
+security:
+  redact_secrets: true
+  redact_trust: ["untrusted_cloud"]
+  deny_images_to_remote: false   # set true to forbid images to cloud members
+  max_image_mb: 20
+  expose_reasoning: false        # include model reasoning traces in tool output
+
+swarm:
+  max_tasks: 12           # hard cap for one ask_family_swarm call
+  max_result_chars: 12000 # per-task truncation returned to the main agent
+  default_synthesize: false
+"""

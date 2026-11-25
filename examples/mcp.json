@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "sub-family": {
+      "command": "uvx",
+      "args": ["sub-family-mcp"],
+      "env": {
+        "DEEPSEEK_API_KEY": "${DEEPSEEK_API_KEY}"
+      }
+    }
+  }
+}

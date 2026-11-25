@@ -1,0 +1,77 @@
+name: Feature request
+description: Suggest a capability, provider, or workflow for Sub-Family
+title: "[feature]: "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the suggestion. Please describe the problem before the
+        solution, and search existing issues first.
+
+  - type: checkboxes
+    id: preflight
+    attributes:
+      label: Pre-flight checks
+      options:
+        - label: I searched existing issues and discussions for this idea.
+          required: true
+        - label: This request is about Sub-Family, not a bug report.
+          required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - New provider or endpoint
+        - New member capability
+        - MCP tools / delegation UX
+        - Sessions
+        - Security / privacy
+        - CLI
+        - Documentation
+        - Packaging / release engineering
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem or use case
+      description: What are you trying to do, and what makes it hard today?
+      placeholder: When I delegate ..., I cannot ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: Describe the behavior or interface you would like.
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Existing config options, workarounds, or other tools you tried.
+    validations:
+      required: false
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: Examples, provider API docs, or mockups. Do not include secrets.
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: contribution
+    attributes:
+      label: Contribution
+      options:
+        - label: I am willing to open a pull request for this.
+          required: false

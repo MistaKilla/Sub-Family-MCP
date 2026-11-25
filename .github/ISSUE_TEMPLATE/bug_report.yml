@@ -1,0 +1,117 @@
+name: Bug report
+description: Report a reproducible problem with Sub-Family
+title: "[bug]: "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report a bug. Please search existing
+        issues first.
+
+        **Do not report security vulnerabilities here.** Follow
+        [SECURITY.md](https://github.com/MistaKilla/Sub-Family-MCP/blob/develop/SECURITY.md)
+        and use GitHub Security Advisories instead.
+
+  - type: checkboxes
+    id: preflight
+    attributes:
+      label: Pre-flight checks
+      options:
+        - label: I searched existing issues and did not find a duplicate.
+          required: true
+        - label: This is not a security vulnerability (those go through GitHub Security Advisories).
+          required: true
+        - label: I can reproduce this on the latest release.
+          required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Sub-Family version
+      description: Output of `sub-family --version` or `pip show sub-family-mcp`.
+      placeholder: "0.1.0"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: install
+    attributes:
+      label: Installation method
+      options:
+        - uvx
+        - pip
+        - pipx
+        - source checkout (uv sync)
+        - other
+    validations:
+      required: true
+
+  - type: input
+    id: environment
+    attributes:
+      label: OS and Python version
+      placeholder: "macOS 15.2, Python 3.13.1"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Affected area
+      options:
+        - MCP server / tool call
+        - Configuration (family.yaml)
+        - Provider or endpoint
+        - Sessions
+        - Security guard / redaction
+        - CLI
+        - Packaging / installation
+        - Documentation
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Minimal, deterministic steps. Include the exact tool call or CLI command.
+      placeholder: |
+        1. Configure member ...
+        2. Call `ask_family` with ...
+        3. Observe ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      description: Include the full error message or tool output. Redact secrets.
+    validations:
+      required: true
+
+  - type: textarea
+    id: config
+    attributes:
+      label: Relevant family.yaml (redacted)
+      description: Remove API keys, private hostnames, and internal URLs.
+      render: yaml
+    validations:
+      required: false
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: stderr output, ideally with SUB_FAMILY_LOG_LEVEL=DEBUG. Redact prompts and keys.
+      render: shell
+    validations:
+      required: false
