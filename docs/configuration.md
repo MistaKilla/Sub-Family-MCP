@@ -357,6 +357,7 @@ sub-family members add farm_two \
   --base-url http://192.168.1.51:11434 \
   --model qwen2.5-coder:7b \
   --trust local \
+  --cost electricity \
   --capability code \
   --capability fast
 ```
